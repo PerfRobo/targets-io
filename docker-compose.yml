@@ -1,111 +1,69 @@
-version: "2"
+
+version: "3"
 
 services:
+  influxdb:
+    image: influxdb
+    ports:
+      - "8086:8086"
+      - "2003:2003"
+    environment:
+      INFLUXDB_ADMIN_ENABLED: "true"
+    networks:
+      - my-net
+    volumes:
+      - "./influxdb.conf:/etc/influxdb/influxdb.conf:ro"
+      - "/home/perfana/influxdb-data:/var/lib/influxdb"
+      - "/etc/timezone:/etc/timezone:ro"
+      - "/etc/localtime:/etc/localtime:ro"
+
+  grafana:
+    image: "grafana/grafana"
+    depends_on:
+      - influxdb
+    environment:
+      GF_SECURITY_ADMIN_USER: foobar
+      GF_SECURITY_ADMIN_PASSWORD: foobar
+      GF_SERVER_ROOT_URL: "http://49.27.22.156:3000"
+    ports:
+      - "3000:3000"
+    networks:
+      - my-net
+    volumes:
+      - "/etc/timezone:/etc/timezone:ro"
+      - "/etc/localtime:/etc/localtime:ro"
+
+  perfana:
+    image: "perfana/perfana:0.24.1"
+    depends_on:
+      - grafana
+      - influxdb
+    environment:
+      ROOT_URL: "http://49.27.22.156:4000"
+      MONGO_URL: "mongodb://mongo:27017"
+      METEOR_SETTINGS: '{"isDemo": true,"autoCreateApplications": true,"snapshotExpires": "7776000","perfanaHost":"http://49.27.22.156:3000","influxDbHost": "influxdb","public": {"perfanaHost":"http://49.27.22.156:4000","OIDCButtonText": "AH LDAP Login"}}'
+    ports:
+      - "4000:3000"
+    networks:
+      - my-net
+    restart: always
+    volumes:
+      - "/etc/timezone:/etc/timezone:ro"
+      - "/etc/localtime:/etc/localtime:ro"
+
+
   mongo:
     image: mongo:3.0
     ports:
-     - "27017:27017"
+    - "27017:27017"
     networks:
-      - my-net
+    - my-net
+    command: --smallfiles
     volumes:
-     - /var/lib/targets-io/mongo:/data/db
-    restart: always
-  elasticsearch:
-    image: "elasticsearch:2"
-    command: "elasticsearch -Des.cluster.name='graylog'"
-    networks:
-      - my-net
-    restart: always
-  graylog:
-    image: graylog2/server
-    environment:
-      GRAYLOG_PASSWORD_SECRET: targets-io-admin-secret
-      GRAYLOG_ROOT_PASSWORD_SHA2: 8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918
-      GRAYLOG_WEB_ENDPOINT_URI: http://${EXTERNAL_IP}:8090/api
-    networks:
-      - my-net
-    ports:
-      - "8090:9000"
-      - "12201/udp:12201/udp"
-    restart: always
-    depends_on:
-      - mongo
-      - elasticsearch
-  graphite:
-    image: dmoll1974/targets-io-graphite
-    networks:
-      - my-net
-    ports:
-     - "8070:80"
-     - "2003:2003"
-     - "8125:8125"
-    volumes:
-     - /var/lib/targets-io/graphite/log:/var/log
-     - /var/lib/targets-io/graphite/storage:/opt/graphite/storage
-    restart: always
-  jenkins:
-    image: dmoll1974/targets-io-jenkins
-    networks:
-      - my-net
-    ports:
-     - "8080:8080"
-     - "50000:50000"
-    restart: always
-  logstash:
-    image: dmoll1974/gatling-logstash
-    networks:
-      - my-net
-    ports:
-     - "5514/udp:5514/udp"
-    depends_on:
-      - graylog
-      - graphite    
-    restart: always
-  redis:
-    image: redis
-    networks:
-      - my-net
-    ports:
-     - "6379:6379"
-    restart: always
-  targetsio:
-    image: dmoll1974/targets-io
-    ports:
-     - "80:3000"
-    command: dockerize -wait tcp://mongo:27017
-    networks:
-      - my-net
-    environment:
-       MONGO_URL: "mongo:27017/targets-io"
-       GRAPHITE_URL: "http://graphite"
-       JENKINS_URL: "http://jenkins:8080"
-       JENKINS_USER: "admin"
-       JENKINS_PASSWORD: "targets-io"
-       REDIS_HOST: "redis"
-       REDIS_PORT: "6379"
-       GRAYLOG_HOST: "graylog"
-       GRAYLOG_PORT: "12201"
-       GRAYLOG_GUI_URL: "http://${EXTERNAL_IP}:8090"
-    restart: always
-    depends_on:
-      - mongo
-      - redis
-      - graphite
-  mean:
-    image: dmoll1974/targets-io-demo-meanjs
-    ports:
-     - "3001:3000"
-    command: dockerize -wait tcp://mongo:27017
-    environment:
-       DB_1_PORT_27017_TCP_ADDR: "mongo:27017"
-    networks:
-      - my-net
-    restart: always
-    depends_on:
-      - mongo
-      - graphite
-
+    - "/home/perfana/mongo-data:/data/db"
+    - "/etc/timezone:/etc/timezone:ro"
+    - "/etc/localtime:/etc/localtime:ro"
+ 
 networks:
-  my-net:
-    driver: bridge
-
+    my-net:
+      driver: bridge
